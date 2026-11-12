@@ -43,6 +43,13 @@ printf 'python=3.12\nnode=22\n' > "$tmp/badexit"
 out="$(PATH="$tmp/stub:$PATH" "$self" preflight.sh "$tmp/badexit" 2>&1)"; rc=$?
 case "$out" in *"got=error"*) echo "PASS case bad-exit rc=$rc";; *) echo "FAIL case bad-exit rc=$rc"; echo "$out"; fails=1;; esac
 
+# то же для node-ветки
+printf '#!/bin/sh\necho 3.12.7\nexit 0\n' > "$tmp/stub/python3"
+printf '#!/bin/sh\necho v22.1.0\nexit 7\n' > "$tmp/stub/node"
+chmod +x "$tmp/stub/python3" "$tmp/stub/node"
+out="$(PATH="$tmp/stub:$PATH" "$self" preflight.sh "$tmp/badexit" 2>&1)"; rc=$?
+case "$out" in *"node want=22 got=error"*) echo "PASS case bad-exit-node rc=$rc";; *) echo "FAIL case bad-exit-node rc=$rc"; echo "$out"; fails=1;; esac
+
 # отсутствующие инструменты не должны давать PASS
 mkdir -p "$tmp/bin"
 for t in awk cut sort uniq tr cat uname grep; do ln -s "$(command -v "$t")" "$tmp/bin/$t" 2>/dev/null; done
