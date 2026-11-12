@@ -7,10 +7,19 @@ MAN="${1:-.build-manifest}"
 [ -e "$MAN" ] || { echo "preflight: манифест не найден: $MAN"; exit 2; }
 [ -r "$MAN" ] || { echo "preflight: манифест не читается: $MAN"; exit 2; }
 
-# манифест: только ключи python/node, без дублей и пустых значений
-bad="$(printf '%s\n' "$(cat "$MAN")" | awk -F= 'NF && $1!="python" && $1!="node"')"
-[ -z "$bad" ] || { echo "preflight: неизвестные ключи: $(printf '%s' "$bad" | tr '\n' ' ')"; exit 2; }
-dup="$(printf '%s\n' "$(cat "$MAN")" | awk -F= 'NF{print $1}' | sort | uniq -d | tr '\n' ' ')"
+# манифест: только строки key=value с ключами python/node, без дублей и мусора
+while IFS= read -r line; do
+  case "$line" in ''|'#'*) continue ;; esac
+  key="${line%%=*}"; val="${line#*=}"
+  case "$key" in
+    python|node) ;;
+    *) echo "preflight: неизвестный ключ: $line"; exit 2 ;;
+  esac
+  case "$val" in
+    ''|*[!0-9.]*) echo "preflight: битое значение: $line"; exit 2 ;;
+  esac
+done < "$MAN"
+dup="$(awk -F= '{print $1}' "$MAN" | grep -v '^#' | sort | uniq -d | tr '\n' ' ')"
 [ -z "$dup" ] || { echo "preflight: дубли ключей: $dup"; exit 2; }
 
 want_py="$(awk -F= '$1=="python"{print $2}' "$MAN")"
@@ -25,10 +34,13 @@ chk() { # name want got
   else echo "FAIL $1 want=$2 got=$3"; fail=1; fi
 }
 
-py="$(python3 -V 2>/dev/null | awk '{print $2}')"
-node="$(node -v 2>/dev/null | tr -d v)"
-chk python "$want_py" "$(printf '%s' "$py" | cut -d. -f1-2)"
-chk node "$want_node" "$(printf '%s' "$node" | cut -d. -f1)"
+# версии: доверяем только нулевому коду возврата
+py_raw="$(python3 -V 2>&1)"; py_rc=$?
+node_raw="$(node -v 2>&1)"; node_rc=$?
+py_minor="$([ "$py_rc" = 0 ] && printf '%s' "$py_raw" | awk '{print $2}' | cut -d. -f1-2 || echo error)"
+node_major="$([ "$node_rc" = 0 ] && printf '%s' "$node_raw" | tr -d v | cut -d. -f1 || echo error)"
+chk python "$want_py" "$py_minor"
+chk node "$want_node" "$node_major"
 echo "bash ${BASH_VERSION:-unknown}"
 echo "os $(uname -s) $(uname -m)"
 if [ "$fail" = 0 ]; then echo "preflight: OK"; else echo "preflight: MISMATCH"; fi
