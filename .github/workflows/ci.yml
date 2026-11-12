@@ -10,6 +10,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: bash version
-        run: /bin/bash --version | head -1
+        run: |
+          /bin/bash --version | head -1
+          if [ "${{ matrix.os }}" != "ubuntu-latest" ]; then
+            /bin/bash -c 'case "$BASH_VERSION" in 3.2*) ;; *) echo "нужен bash 3.2, есть $BASH_VERSION"; exit 1;; esac'
+          fi
       - name: tests
         run: /bin/bash tests/run.sh
