@@ -1,0 +1,15 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  bash32:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-13, macos-14, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash version
+        run: /bin/bash --version | head -1
+      - name: tests
+        run: /bin/bash tests/run.sh
