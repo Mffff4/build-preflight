@@ -7,23 +7,30 @@ MAN="${1:-.build-manifest}"
 [ -e "$MAN" ] || { echo "preflight: манифест не найден: $MAN"; exit 2; }
 [ -r "$MAN" ] || { echo "preflight: манифест не читается: $MAN"; exit 2; }
 
-# манифест: только строки key=value с ключами python/node, без дублей и мусора
+# нормализация: срезать комментарии и хвостовые пробелы, выкинуть пустые строки,
+# последняя строка без перевода строки обрабатывается так же, как с ним
+norm="$(awk '{sub(/#.*/,""); sub(/[ \t]+$/,""); if ($0!="") print}' "$MAN")"
+[ -n "$norm" ] || { echo "preflight: пустой манифест: $MAN"; exit 2; }
+
 while IFS= read -r line; do
-  case "$line" in ''|'#'*) continue ;; esac
   key="${line%%=*}"; val="${line#*=}"
   case "$key" in
     python|node) ;;
-    *) echo "preflight: неизвестный ключ: $line"; exit 2 ;;
+    *) echo "preflight: неизвестный ключ: $(printf '%s' "$key" | cut -c1-24)"; exit 2 ;;
   esac
   case "$val" in
-    ''|*[!0-9.]*) echo "preflight: битое значение: $line"; exit 2 ;;
+    ''|*[!0-9.]*) echo "preflight: битое значение: $key=$(printf '%s' "$val" | cut -c1-24)"; exit 2 ;;
   esac
-done < "$MAN"
-dup="$(awk -F= '{print $1}' "$MAN" | grep -v '^#' | sort | uniq -d | tr '\n' ' ')"
+  if [ "${#val}" -gt 16 ]; then echo "preflight: длинное значение: $key=$(printf '%s' "$val" | cut -c1-16)..."; exit 2; fi
+done <<EOF
+$norm
+EOF
+
+dup="$(printf '%s\n' "$norm" | cut -d= -f1 | sort | uniq -d | tr '\n' ' ')"
 [ -z "$dup" ] || { echo "preflight: дубли ключей: $dup"; exit 2; }
 
-want_py="$(awk -F= '$1=="python"{print $2}' "$MAN")"
-want_node="$(awk -F= '$1=="node"{print $2}' "$MAN")"
+want_py="$(printf '%s\n' "$norm" | awk -F= '$1=="python"{print $2}')"
+want_node="$(printf '%s\n' "$norm" | awk -F= '$1=="node"{print $2}')"
 [ -n "$want_py" ] || { echo "preflight: пустой python в манифесте"; exit 2; }
 [ -n "$want_node" ] || { echo "preflight: пустой node в манифесте"; exit 2; }
 

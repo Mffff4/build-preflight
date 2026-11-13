@@ -10,8 +10,8 @@ echo "interp $self $BASH_VERSION"
 py="$(python3 -V 2>/dev/null | awk '{print $2}' | cut -d. -f1-2)"
 node="$(node -v 2>/dev/null | tr -d v | cut -d. -f1)"
 
-try() { # expect-rc manifest-name manifest-body
-  printf '%s\n' "$3" > "$tmp/$2"
+try() { # expect-rc name body [nonl]
+  if [ "${4:-nl}" = nonl ]; then printf '%s' "$3" > "$tmp/$2"; else printf '%s\n' "$3" > "$tmp/$2"; fi
   out="$("$self" preflight.sh "$tmp/$2" 2>&1)"; rc=$?
   if [ "$rc" = "$1" ]; then echo "PASS case $2 rc=$rc"; else echo "FAIL case $2 rc=$rc want=$1"; echo "$out"; return 1; fi
 }
@@ -32,6 +32,19 @@ try 2 nofile-missing "python=$py" ; rm -f "$tmp/nofile-missing"
 out="$("$self" preflight.sh "$tmp/nofile-missing" 2>&1)"; [ "$?" = 2 ] || { echo "FAIL case missing-file"; fails=1; }
 
 try 2 eq-in-value "python=3.12=INVALID
+node=$node" || fails=1
+
+try 2 last-line-nonl "python=$py
+node=$node=INVALID" nonl || fails=1
+try 0 inline-comment "python=$py # ok
+node=$node" || fails=1
+try 0 inline-comment-nonl "python=$py
+node=$node # note" nonl || fails=1
+try 0 blank-lines "python=$py
+
+
+node=$node" || fails=1
+try 2 long-value "python=3.120000000000000000000
 node=$node" || fails=1
 
 # инструмент печатает версию, но падает с ненулевым кодом → FAIL
